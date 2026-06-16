@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zedox CDK Key Manager - Admin</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f0f;color:#e0e0e0}
+.container{max-width:800px;margin:0 auto;padding:30px 20px}
+h1{font-size:28px;color:#fff}
+.subtitle{color:#888;font-size:14px;margin-bottom:30px}
+.card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:28px;margin-bottom:20px}
+.card h3{font-size:16px;color:#fff;margin-bottom:16px}
+input,select{width:100%;padding:12px 16px;background:#12121e;border:1px solid #2a2a4a;border-radius:8px;color:#fff;font-size:14px;margin-bottom:12px;outline:none;font-family:inherit}
+input:focus,select:focus{border-color:#7c5cfc}
+label{display:block;font-size:13px;color:#aaa;margin-bottom:6px}
+.row{display:flex;gap:12px}.row>*{flex:1}
+.btn{padding:12px 24px;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:.2s}
+.btn-primary{background:#7c5cfc;color:#fff;width:100%}
+.btn-primary:hover{background:#6a4ae0}
+.btn-danger{background:#e74c3c;color:#fff;padding:6px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer}
+.btn-outline{background:transparent;border:1px solid #2a2a4a;color:#ccc;padding:6px 14px;font-size:13px;cursor:pointer;border-radius:6px}
+.btn-secondary{background:#2a2a4a;color:#fff;padding:6px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:10px 8px;text-align:left;border-bottom:1px solid #2a2a4a}
+th{color:#888;font-weight:500;font-size:12px;text-transform:uppercase}
+td{color:#ccc;font-family:'Courier New',monospace;font-size:12px;word-break:break-all}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-green{background:#1a3a2a;color:#4ade80}
+.badge-red{background:#3a1a1a;color:#f87171}
+.badge-yellow{background:#3a3a1a;color:#fbbf24}
+.badge-gray{background:#1e1e2e;color:#888}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1a1a2e;border:1px solid #2a2a4a;padding:14px 28px;border-radius:10px;font-size:14px;display:none;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.login-box{max-width:400px;margin:80px auto;text-align:center}
+.login-box h1{margin-bottom:8px}.login-box p{color:#888;margin-bottom:24px}
+.header-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.user-info{font-size:13px;color:#888}
+#cdkResult{display:none;margin-top:16px;padding:16px;background:#0a0a16;border:1px solid #2a2a4a;border-radius:8px}
+#cdkResult .generated-key{font-size:22px;text-align:center;color:#7c5cfc;font-weight:bold;letter-spacing:4px;padding:12px;cursor:pointer}
+#cdkResult .hint{text-align:center;color:#666;font-size:12px;margin-top:4px}
+#cdkResult .price-tag{text-align:center;color:#4ade80;font-size:14px;font-weight:600;margin-top:6px}
+.stats-row{display:flex;gap:16px;margin-bottom:20px}
+.stat-box{flex:1;background:#12121e;border:1px solid #2a2a4a;border-radius:8px;padding:16px;text-align:center}
+.stat-box .num{font-size:28px;font-weight:700;color:#fff}
+.stat-box .lbl{font-size:12px;color:#888;margin-top:4px}
+.info-bar{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.info-bar .telegram{color:#a29bfe;font-weight:600;font-size:14px}
+.info-bar .telegram a{color:#a29bfe;text-decoration:none}
+.firebase-note{background:#1a1a0a;border:1px solid #5a5a1a;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#fde68a}
+@media(max-width:600px){.row,.stats-row{flex-direction:column}}
+</style>
+</head>
+<body>
+<div id="loginScreen" class="container">
+  <div class="login-box">
+    <h1>🔐 Zedox CDK Manager</h1>
+    <p>Admin panel — sign in to manage CDK codes</p>
+    <div class="card">
+      <input type="email" id="loginEmail" placeholder="Admin Email" value="admin@globexo.com">
+      <input type="password" id="loginPassword" placeholder="Password" onkeydown="if(event.key==='Enter') login()">
+      <button class="btn btn-primary" onclick="login()" id="loginBtn">Sign In</button>
+      <div id="loginError" style="color:#f87171;font-size:13px;margin-top:8px;text-align:center;"></div>
+    </div>
+  </div>
+</div>
+<div id="adminScreen" class="container" style="display:none;">
+  <div class="header-bar">
+    <div><h1>🔐 Zedox CDK Manager</h1><p class="subtitle" style="margin-bottom:0;">Zedox ChatGPT Plus — CDK Key Management</p></div>
+    <div style="text-align:right;">
+      <div class="user-info" id="userEmailDisplay"></div>
+      <button class="btn-outline" onclick="logout()" style="margin-top:4px;">Logout</button>
+      <button class="btn-outline" onclick="window.location.href='/'">← Back to Site</button>
+    </div>
+  </div>
+  <div class="info-bar">
+    <div class="telegram">📢 Channel: <a href="https://t.me/zedoxprime1" target="_blank">@zedoxprime1</a></div>
+    <div class="telegram">💬 Contact: <a href="https://t.me/zedox5" target="_blank">@zedox5</a></div>
+  </div>
+  <div class="firebase-note">
+    ⚠️ Make sure Firebase Firestore Rules allow reads/writes. If you see "Missing or insufficient permissions", update rules in Firebase Console.
+  </div>
+  <div class="stats-row">
+    <div class="stat-box"><div class="num" id="statTotal">0</div><div class="lbl">Total Keys</div></div>
+    <div class="stat-box"><div class="num" id="statActive">0</div><div class="lbl">Active</div></div>
+    <div class="stat-box"><div class="num" id="statUsed">0</div><div class="lbl">Used Today</div></div>
+    <div class="stat-box"><div class="num" id="statRevenue">$0</div><div class="lbl">Revenue</div></div>
+  </div>
+  <div class="card">
+    <h3>➕ Generate New CDK Code</h3>
+    <div class="row">
+      <div style="flex:2">
+        <label>Label / Buyer</label>
+        <input type="text" id="cdkLabel" placeholder="e.g., @zedox5 or buyer name">
+      </div>
+      <div style="flex:1">
+        <label>Price ($)</label>
+        <input type="number" id="cdkPrice" value="0.50" step="0.10" min="0">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Max Uses</label>
+        <select id="cdkMaxUses">
+          <option value="1">1 — Single Use</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="999999">♾ Unlimited</option>
+        </select>
+      </div>
+      <div>
+        <label>Expires</label>
+        <select id="cdkExpiry">
+          <option value="1">1 Day</option>
+          <option value="3">3 Days</option>
+          <option value="7" selected>7 Days</option>
+          <option value="30">30 Days</option>
+          <option value="90">90 Days</option>
+          <option value="365">1 Year</option>
+          <option value="0">Never</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="generateCDK()" id="generateBtn">Generate CDK Code</button>
+    <div id="cdkResult">
+      <div class="generated-key" id="generatedKeyDisplay" onclick="copyKey(this)">CDK-XXXX-XXXX-XX</div>
+      <div class="price-tag" id="priceDisplay">💰 $0.50</div>
+      <div class="hint">📋 Click key to copy</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>📋 All CDK Codes</h3>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>CDK Code</th>
+            <th>Buyer</th>
+            <th>Price</th>
+            <th>Uses</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Expires</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="cdkTableBody">
+          <tr><td colspan="8" style="text-align:center;color:#666;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+// ===== FIREBASE CONFIG =====
+const firebaseConfig = {
+  apiKey: "AIzaSyC7SjMgzuH7stBaTP-jqkHfXDLmnNJV0X8",
+  authDomain: "globexo-d9ade.firebaseapp.com",
+  databaseURL: "https://globexo-d9ade-default-rtdb.firebaseio.com",
+  projectId: "globexo-d9ade",
+  storageBucket: "globexo-d9ade.firebasestorage.app",
+  messagingSenderId: "1009453417317",
+  appId: "1:1009453417317:web:32538a719df79d3c6ed78c",
+  measurementId: "G-X0QPY3ML6M"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+// ===== AUTH STATE =====
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('adminScreen').style.display = 'block';
+    document.getElementById('userEmailDisplay').textContent = '👤 ' + user.email;
+    loadKeys();
+  } else {
+    document.getElementById('loginScreen').style.display = 'block';
+    document.getElementById('adminScreen').style.display = 'none';
+  }
+});
+
+// ===== LOGIN =====
+async function login() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+    showToast('✅ Logged in');
+  } catch (e) {
+    document.getElementById('loginError').textContent = '❌ ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Sign In';
+}
+
+function logout() {
+  auth.signOut();
+  showToast('Logged out');
+}
+
+// ===== KEY GENERATION =====
+function genKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let key = '';
+  for (let i = 0; i < 10; i++) {
+    key += chars[Math.floor(Math.random() * chars.length)];
+    if (i === 3 || i === 7) key += '-';
+  }
+  return 'CDK-' + key;
+}
+
+async function generateCDK() {
+  const label = document.getElementById('cdkLabel').value.trim() || 'Unnamed';
+  const price = parseFloat(document.getElementById('cdkPrice').value) || 0.50;
+  const maxUses = parseInt(document.getElementById('cdkMaxUses').value);
+  const expiryDays = parseInt(document.getElementById('cdkExpiry').value);
+  const btn = document.getElementById('generateBtn');
+  
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  
+  try {
+    const key = genKey();
+    
+    // Use ISO strings instead of Firestore Timestamps to avoid permission issues
+    const docData = {
+      key: key,
+      label: label,
+      price: price,
+      maxUses: maxUses,
+      usesRemaining: maxUses,
+      usedBy: [],
+      createdAt: new Date().toISOString(),
+      expiresAt: expiryDays === 0 ? null : new Date(Date.now() + expiryDays * 86400000).toISOString(),
+      active: true,
+      createdBy: auth.currentUser ? auth.currentUser.email : 'unknown'
+    };
+    
+    await db.collection('cdk_keys').doc(key).set(docData);
+    
+    document.getElementById('generatedKeyDisplay').textContent = key;
+    document.getElementById('priceDisplay').textContent = '💰 $' + price.toFixed(2);
+    document.getElementById('cdkResult').style.display = 'block';
+    document.getElementById('cdkLabel').value = '';
+    showToast('✅ CDK generated!');
+    loadKeys();
+  } catch (e) {
+    showToast('❌ Error: ' + e.message);
+    console.error(e);
+  }
+  
+  btn.disabled = false;
+  btn.textContent = 'Generate CDK Code';
+}
+
+function copyKey(el) {
+  navigator.clipboard.writeText(el.textContent)
+    .then(() => showToast('📋 Copied: ' + el.textContent))
+    .catch(() => showToast('❌ Copy failed'));
+}
+
+// ===== LOAD KEYS =====
+async function loadKeys() {
+  const tbody = document.getElementById('cdkTableBody');
+  
+  try {
+    const snapshot = await db.collection('cdk_keys')
+      .orderBy('createdAt', 'desc')
+      .limit(200)
+      .get();
+    
+    if (snapshot.empty) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#666;">No CDK codes yet. Generate your first one above.</td></tr>';
+      updateStats([]);
+      return;
+    }
+    
+    const keys = [];
+    snapshot.forEach(doc => keys.push({ id: doc.id, ...doc.data() }));
+    
+    tbody.innerHTML = keys.map(k => {
+      const now = new Date();
+      
+      // Parse dates - handles ISO strings and Firestore Timestamps
+      let expiresDate = null;
+      if (k.expiresAt) {
+        if (typeof k.expiresAt === 'string') expiresDate = new Date(k.expiresAt);
+        else if (k.expiresAt?.toDate) expiresDate = k.expiresAt.toDate();
+        else if (k.expiresAt?.seconds) expiresDate = new Date(k.expiresAt.seconds * 1000);
+      }
+      
+      let createdDate = null;
+      if (k.createdAt) {
+        if (typeof k.createdAt === 'string') createdDate = new Date(k.createdAt);
+        else if (k.createdAt?.toDate) createdDate = k.createdAt.toDate();
+        else if (k.createdAt?.seconds) createdDate = new Date(k.createdAt.seconds * 1000);
+      }
+      
+      const isExpired = expiresDate && expiresDate < now;
+      const isUsedUp = k.usesRemaining !== undefined && k.usesRemaining <= 0 && k.maxUses < 999999;
+      
+      let status = 'Active', statusClass = 'badge-green';
+      if (k.active === false) { status = 'Revoked'; statusClass = 'badge-red'; }
+      else if (isExpired) { status = 'Expired'; statusClass = 'badge-yellow'; }
+      else if (isUsedUp) { status = 'Used Up'; statusClass = 'badge-gray'; }
+      
+      const usesDisplay = k.maxUses >= 999999 ? '♾' : ((k.maxUses - (k.usesRemaining || 0)) + '/' + k.maxUses);
+      const createdStr = createdDate ? createdDate.toLocaleDateString() : '-';
+      const expiresStr = expiresDate ? expiresDate.toLocaleDateString() : 'Never';
+      const priceStr = k.price ? '$' + parseFloat(k.price).toFixed(2) : '$0.50';
+      
+      const canRevoke = k.active !== false && !isExpired && !isUsedUp;
+      
+      return '<tr>' +
+        '<td style="color:#7c5cfc;font-weight:600;font-size:14px;">' + k.key + '</td>' +
+        '<td style="font-family:inherit;font-size:13px;">' + k.label + '</td>' +
+        '<td style="color:#4ade80;font-weight:600;">' + priceStr + '</td>' +
+        '<td>' + usesDisplay + '</td>' +
+        '<td><span class="badge ' + statusClass + '">' + status + '</span></td>' +
+        '<td>' + createdStr + '</td>' +
+        '<td>' + expiresStr + '</td>' +
+        '<td>' + (canRevoke ? '<button class="btn-danger" onclick="revokeKey(\'' + k.key + '\')">Revoke</button>' : '-') + '</td>' +
+        '</tr>';
+    }).join('');
+    
+    updateStats(keys);
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#f87171;">❌ Error loading keys: ' + e.message + '<br><small>Check Firebase Rules — needs read access to cdk_keys collection</small></td></tr>';
+    console.error(e);
+  }
+}
+
+// ===== UPDATE STATS =====
+function updateStats(keys) {
+  const total = keys.length;
+  const now = new Date();
+  
+  const active = keys.filter(k => {
+    if (k.active === false) return false;
+    let expiresDate = null;
+    if (k.expiresAt) {
+      if (typeof k.expiresAt === 'string') expiresDate = new Date(k.expiresAt);
+      else if (k.expiresAt?.toDate) expiresDate = k.expiresAt.toDate();
+      else if (k.expiresAt?.seconds) expiresDate = new Date(k.expiresAt.seconds * 1000);
+    }
+    if (expiresDate && expiresDate < now) return false;
+    if (k.usesRemaining !== undefined && k.usesRemaining <= 0 && k.maxUses < 999999) return false;
+    return true;
+  }).length;
+  
+  const todayStr = new Date().toDateString();
+  const usedToday = keys.filter(k => {
+    if (!k.usedBy || !Array.isArray(k.usedBy)) return false;
+    return k.usedBy.some(u => {
+      if (!u || !u.time) return false;
+      let d = null;
+      if (typeof u.time === 'string') d = new Date(u.time);
+      else if (u.time?.toDate) d = u.time.toDate();
+      else if (u.time?.seconds) d = new Date(u.time.seconds * 1000);
+      return d && d.toDateString() === todayStr;
+    });
+  }).length;
+  
+  let revenue = 0;
+  keys.forEach(k => {
+    const price = parseFloat(k.price) || 0.50;
+    const usedCount = k.maxUses >= 999999 ? 0 : (k.maxUses - (k.usesRemaining || 0));
+    revenue += usedCount * price;
+  });
+  
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statActive').textContent = active;
+  document.getElementById('statUsed').textContent = usedToday;
+  document.getElementById('statRevenue').textContent = '$' + revenue.toFixed(2);
+}
+
+// ===== REVOKE KEY =====
+async function revokeKey(id) {
+  if (!confirm('Revoke this key? This cannot be undone.')) return;
+  try {
+    await db.collection('cdk_keys').doc(id).update({ active: false });
+    showToast('🔴 Key revoked');
+    loadKeys();
+  } catch (e) {
+    showToast('❌ ' + e.message);
+  }
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(() => t.style.display = 'none', 3500);
+}
+</script>
+</body>
+</html>

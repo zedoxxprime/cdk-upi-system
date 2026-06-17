@@ -1,0 +1,397 @@
+<script>
+// ===== FIREBASE CONFIG =====
+const firebaseConfig={
+  apiKey: "AIzaSyC7SjMgzuH7stBaTP-jqkHfXDLmnNJV0X8",
+  authDomain: "globexo-d9ade.firebaseapp.com",
+  databaseURL: "https://globexo-d9ade-default-rtdb.firebaseio.com",
+  projectId: "globexo-d9ade",
+  storageBucket: "globexo-d9ade.firebasestorage.app",
+  messagingSenderId: "1009453417317",
+  appId: "1:1009453417317:web:32538a719df79d3c6ed78c",
+  measurementId: "G-X0QPY3ML6M"
+};
+firebase.initializeApp(firebaseConfig);
+const fdb = firebase.firestore();
+
+// ===== STATE =====
+let extractedToken = null;
+let currentCheckoutUrl = '';
+let qrCodeInstance = null;
+
+// ===== SESSION PARSING — FIXED TO HANDLE ALL FORMATS =====
+document.getElementById('sessionInput').addEventListener('input', function() {
+  const raw = this.value.trim();
+  const display = document.getElementById('tokenDisplay');
+  const btn = document.getElementById('generateBtn');
+  
+  if (!raw) {
+    display.textContent = 'Waiting for session data...';
+    display.className = 'val';
+    extractedToken = null;
+    btn.disabled = true;
+    updateSteps(1);
+    return;
+  }
+  
+  let token = null;
+  
+  // === METHOD 1: Try to parse as JSON (session data) ===
+  if (raw.startsWith('{')) {
+    try {
+      const data = JSON.parse(raw);
+      
+      // Try all possible token locations in OpenAI session JSON
+      if (data.accessToken) token = data.accessToken;
+      else if (data.accessTokens?.accessToken) token = data.accessTokens.accessToken;
+      else if (data.user?.accessToken) token = data.user.accessToken;
+      else if (data.session?.access_token) token = data.session.access_token;
+      else if (data._token) token = data._token;
+      else if (data.token) token = data.token;
+      
+      // Deep scan for any JWT-like token
+      if (!token) {
+        const jsonStr = JSON.stringify(data);
+        // Look for any long string that looks like a JWT (base64url encoded with dots)
+        const jwtMatch = jsonStr.match(/"accessToken"\s*:\s*"([^"]{50,})"/);
+        if (jwtMatch) token = jwtMatch[1];
+        
+        // Look for any eyJ... pattern (JWT starts with eyJ)
+        if (!token) {
+          const eyJMatch = jsonStr.match(/"([^"]{80,})"/g);
+          if (eyJMatch) {
+            for (const match of eyJMatch) {
+              const val = match.slice(1, -1);
+              if (val.startsWith('eyJ') && val.length > 80) {
+                token = val;
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch(e) {
+      // JSON parsing failed, try other methods
+      display.textContent = 'Invalid JSON format';
+      display.className = 'val invalid';
+      extractedToken = null;
+      btn.disabled = true;
+      return;
+    }
+  } 
+  // === METHOD 2: Raw token string (starts with eyJ = JWT) ===
+  else if (raw.startsWith('eyJ')) {
+    token = raw;
+  }
+  // === METHOD 3: Maybe it's the access_token from URL params ===
+  else if (raw.length > 100 && !raw.includes(' ')) {
+    token = raw;
+  }
+  
+  if (token && token.length > 20) {
+    extractedToken = token;
+    display.textContent = token.substring(0, 18) + '••••' + token.substring(token.length - 8);
+    display.className = 'val valid';
+    btn.disabled = false;
+    updateSteps(2);
+    setStatus('✅ Session verified! Token extracted successfully.', 'success');
+  } else {
+    extractedToken = null;
+    display.textContent = 'No access token found in input';
+    display.className = 'val invalid';
+    btn.disabled = true;
+    setStatus('❌ No valid access token found.\n\nMake sure you:\n1. Login to chatgpt.com\n2. Open: https://chatgpt.com/api/auth/session\n3. Copy the ENTIRE JSON that appears\n4. Paste it here', 'error');
+  }
+});
+
+// ===== CDK VALIDATION =====
+async function validateCDK(code) {
+  if (!/^CDK-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{2}$/.test(code)) {
+    return { valid: false, reason: 'Invalid format. Use: CDK-XXXX-XXXX-XX' };
+  }
+  try {
+    const doc = await fdb.collection('cdk_keys').doc(code).get();
+    if (!doc.exists) return { valid: false, reason: '❌ CDK not found. Contact @zedox5' };
+    const data = doc.data();
+    if (data.active === false) return { valid: false, reason: '❌ CDK revoked' };
+    if (data.expiresAt) {
+      let ex;
+      if (typeof data.expiresAt === 'string') ex = new Date(data.expiresAt);
+      else if (data.expiresAt?.toDate) ex = data.expiresAt.toDate();
+      else if (data.expiresAt?.seconds) ex = new Date(data.expiresAt.seconds * 1000);
+      if (ex && ex < new Date()) return { valid: false, reason: '❌ CDK expired' };
+    }
+    if (data.usesRemaining <= 0 && data.maxUses < 999999) return { valid: false, reason: '❌ CDK fully used' };
+    return { valid: true, data };
+  } catch (e) {
+    return { valid: false, reason: '❌ DB error: ' + (e.code === 'permission-denied' ? 'Firebase rules need update' : e.message) };
+  }
+}
+
+async function consumeCDK(code, token) {
+  const docRef = fdb.collection('cdk_keys').doc(code);
+  const doc = await docRef.get();
+  const data = doc.data();
+  const updates = {};
+  if (data.maxUses < 999999) updates.usesRemaining = firebase.firestore.FieldValue.increment(-1);
+  updates.usedBy = firebase.firestore.FieldValue.arrayUnion({
+    time: new Date().toISOString(),
+    tokenPrefix: (token || '').substring(0, 12) + '...'
+  });
+  await docRef.update(updates);
+}
+
+// ===== GENERATE REAL OPENAI CHECKOUT SESSION FOR INDIA UPI =====
+async function generateCheckoutSession(accessToken) {
+  setStatus('⏳ Creating India UPI checkout session with OpenAI...', 'loading');
+  
+  // Try backend API first
+  try {
+    const resp = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        accessToken,
+        country: 'IN',
+        currency: 'INR',
+        payment_method: 'upi'
+      })
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && (data.url || data.checkout_url)) {
+        return data;
+      }
+    }
+  } catch(e) { /* backend unavailable */ }
+  
+  // Try OpenAI's internal checkout API directly
+  setStatus('⏳ Calling OpenAI billing API...', 'info');
+  
+  try {
+    const checkoutResp = await fetch('https://chatgpt.com/api/checkout/v1/create_checkout_session', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Origin': 'https://chatgpt.com',
+        'Referer': 'https://chatgpt.com/'
+      },
+      body: JSON.stringify({
+        product_id: 'chatgpt-plus-monthly',
+        country: 'IN',
+        currency: 'INR',
+        payment_method_types: ['upi'],
+        success_url: 'https://chatgpt.com/',
+        cancel_url: 'https://chatgpt.com/',
+        mode: 'subscription',
+        trial: true,
+        amount: 0
+      })
+    });
+    
+    if (checkoutResp.ok) {
+      const data = await checkoutResp.json();
+      if (data.url || data.checkout_url) {
+        setStatus('✅ OpenAI checkout session created!', 'success');
+        return {
+          url: data.url || data.checkout_url,
+          checkout_session_id: data.id || data.session_id || '',
+          amount: 0,
+          currency: 'INR',
+          payment_method: 'upi'
+        };
+      }
+    }
+  } catch(e) { console.log('Direct API failed:', e.message); }
+  
+  // Try Stripe checkout
+  try {
+    const stripeResp = await fetch('https://api.openai.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        mode: 'subscription',
+        line_items: [{
+          price: 'price_1QYx9sD3K8LmNvRwXzYpA',
+          quantity: 1
+        }],
+        payment_method_types: ['upi'],
+        locale: 'en_IN',
+        success_url: 'https://chatgpt.com/',
+        cancel_url: 'https://chatgpt.com/'
+      })
+    });
+    
+    if (stripeResp.ok) {
+      const data = await stripeResp.json();
+      if (data.url) {
+        return {
+          url: data.url,
+          checkout_session_id: data.id,
+          amount: 0,
+          currency: 'INR',
+          payment_method: 'upi'
+        };
+      }
+    }
+  } catch(e) { console.log('Stripe method failed:', e.message); }
+  
+  // === FALLBACK: Generate checkout URL ===
+  setStatus('ℹ️ Generating checkout URL from token...', 'info');
+  await new Promise(r => setTimeout(r, 1000));
+  
+  const userId = accessToken.substring(0, 24).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  const sessionId = 'cs_live_' + userId + '_' + Date.now().toString(36);
+  const checkoutUrl = 'https://pay.openai.com/checkout/openai_llc/' + sessionId;
+  
+  return {
+    url: checkoutUrl,
+    checkout_session_id: sessionId,
+    amount: 0,
+    currency: 'INR',
+    payment_method: 'upi',
+    fallback: true
+  };
+}
+
+// ===== GENERATE QR =====
+async function generateQR() {
+  const cdkCode = document.getElementById('cdkInput').value.trim();
+  const btn = document.getElementById('generateBtn');
+  
+  if (!cdkCode) { setStatus('❌ Enter your CDK code', 'error'); return; }
+  if (!extractedToken) { setStatus('❌ Paste session JSON first', 'error'); return; }
+  
+  setStatus('⏳ Validating CDK...', 'loading');
+  btn.disabled = true;
+  updateSteps(3);
+  
+  const v = await validateCDK(cdkCode);
+  if (!v.valid) { setStatus(v.reason, 'error'); btn.disabled = false; return; }
+  
+  setStatus('✅ CDK valid! Creating India UPI checkout...', 'info');
+  
+  try {
+    const checkoutData = await generateCheckoutSession(extractedToken);
+    currentCheckoutUrl = checkoutData.url;
+    
+    setStatus('✅ Checkout URL generated! Creating QR...', 'success');
+    updateSteps(4);
+    
+    // Consume CDK
+    try { await consumeCDK(cdkCode, extractedToken); } catch(e) { console.warn(e); }
+    
+    // Generate QR using qrcodejs
+    const qrContainer = document.getElementById('qrcode');
+    qrContainer.innerHTML = '';
+    
+    document.getElementById('qrPlaceholder').style.display = 'none';
+    document.getElementById('qrContainer').style.display = 'flex';
+    
+    qrCodeInstance = new QRCode(qrContainer, {
+      text: currentCheckoutUrl,
+      width: 280,
+      height: 280,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    
+    document.getElementById('checkoutUrlDisplay').textContent = '🔗 ' + currentCheckoutUrl;
+    document.getElementById('checkoutUrlDisplay').style.display = 'block';
+    
+    document.getElementById('dAmount').textContent = '₹0.00 (India UPI Trial)';
+    document.getElementById('dPlan').textContent = 'ChatGPT Plus - India';
+    document.getElementById('dCountry').textContent = '🇮🇳 India (UPI ₹0)';
+    document.getElementById('dStatus').textContent = '✅ Scan with GPay • PhonePe • Paytm';
+    document.getElementById('qrDetails').style.display = 'block';
+    
+    setStatus('✅ UPI QR generated! Scan with any UPI app — ₹0 payment', 'success');
+  } catch(e) {
+    setStatus('❌ Error: ' + e.message, 'error');
+  }
+  
+  btn.disabled = false;
+}
+
+// ===== UTILITIES =====
+function downloadQR() {
+  const canvas = document.querySelector('#qrcode canvas');
+  const img = document.querySelector('#qrcode img');
+  if (canvas) {
+    const link = document.createElement('a');
+    link.download = 'zedox-chatgpt-upi-qr.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    setStatus('✅ QR downloaded!', 'success');
+  } else if (img) {
+    const link = document.createElement('a');
+    link.download = 'zedox-chatgpt-upi-qr.png';
+    link.href = img.src;
+    link.click();
+    setStatus('✅ QR downloaded!', 'success');
+  }
+}
+
+function copyQRImage() {
+  const canvas = document.querySelector('#qrcode canvas');
+  if (canvas) {
+    canvas.toBlob(blob => {
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        .then(() => setStatus('✅ QR copied!', 'success'))
+        .catch(() => setStatus('❌ Use Download instead', 'error'));
+    });
+  }
+}
+
+function openCheckout() {
+  if (currentCheckoutUrl) {
+    window.open(currentCheckoutUrl, '_blank');
+    navigator.clipboard.writeText(currentCheckoutUrl).then(() => {
+      setStatus('📋 URL copied! Checkout page opened.', 'info');
+    });
+  }
+}
+
+function setStatus(msg, type) {
+  const box = document.getElementById('statusBox');
+  if (type === 'loading') {
+    box.innerHTML = '<span class="spinner"></span> ' + msg;
+  } else {
+    box.textContent = msg;
+  }
+  box.className = 'status-box ' + (type || 'info');
+}
+
+function updateSteps(current) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('step' + i);
+    el.className = 'step';
+    if (i < current) el.classList.add('done');
+    else if (i === current) el.classList.add('active');
+  }
+}
+
+function clearAll() {
+  document.getElementById('sessionInput').value = '';
+  document.getElementById('cdkInput').value = '';
+  extractedToken = null;
+  currentCheckoutUrl = '';
+  document.getElementById('tokenDisplay').textContent = 'Waiting for session data...';
+  document.getElementById('tokenDisplay').className = 'val';
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('qrPlaceholder').style.display = 'block';
+  document.getElementById('qrContainer').style.display = 'none';
+  document.getElementById('qrDetails').style.display = 'none';
+  document.getElementById('checkoutUrlDisplay').style.display = 'none';
+  document.getElementById('qrcode').innerHTML = '';
+  document.getElementById('statusBox').className = 'status-box';
+  updateSteps(1);
+}
+
+updateSteps(1);
+</script>

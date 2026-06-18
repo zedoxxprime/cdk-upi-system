@@ -1,9 +1,0 @@
-{
-    "name": "chatgpt-upi-bypass",
-    "version": "1.0.0",
-    "description": "Bypass ChatGPT UPI failure with direct QR generation",
-    "main": "api/generate.js",
-    "engines": {
-        "node": "18.x"
-    }
-}

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zedox ChatGPT Plus - UPI Payment</title>
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 40px;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+    }
+    .logo { text-align: center; margin-bottom: 30px; }
+    .logo h1 { font-size: 28px; font-weight: 800; background: linear-gradient(135deg, #00d2ff, #3a7bd5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
+    .logo p { color: #888; font-size: 14px; margin-top: 4px; }
+
+    .step-indicator { display: flex; justify-content: center; gap: 8px; margin-bottom: 25px; }
+    .step { width: 10px; height: 10px; border-radius: 50%; background: #333; transition: all 0.3s; }
+    .step.active { background: #00d2ff; box-shadow: 0 0 12px rgba(0, 210, 255, 0.5); }
+    .step.completed { background: #00c853; box-shadow: 0 0 12px rgba(0, 200, 83, 0.5); }
+
+    .card {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .card-title { color: #aaa; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 16px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; color: #bbb; font-size: 13px; margin-bottom: 6px; font-weight: 500; }
+    input, textarea {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.3s;
+    }
+    input:focus, textarea:focus { border-color: #00d2ff; box-shadow: 0 0 20px rgba(0, 210, 255, 0.1); }
+    textarea { resize: vertical; min-height: 100px; font-family: 'Courier New', monospace; font-size: 12px; }
+    ::placeholder { color: #555; }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary { background: linear-gradient(135deg, #00d2ff, #3a7bd5); color: #fff; }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0, 210, 255, 0.3); }
+    .btn-success { background: linear-gradient(135deg, #00c853, #009624); color: #fff; }
+    .btn-success:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0, 200, 83, 0.3); }
+    .btn-warning { background: linear-gradient(135deg, #ff9800, #f57c00); color: #fff; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn .spinner { display: none; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; margin: 0 auto; }
+    .btn.loading .spinner { display: block; }
+    .btn.loading .btn-text { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .qr-container { text-align: center; padding: 20px 0; display: none; }
+    .qr-container.show { display: block; }
+    .qr-container img {
+      width: 260px; height: 260px;
+      border-radius: 16px; padding: 16px;
+      background: #fff;
+      margin-bottom: 16px;
+      cursor: pointer;
+    }
+    .amount-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+      padding: 8px 24px;
+      border-radius: 50px;
+      font-size: 24px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .order-info { color: #888; font-size: 12px; margin-top: 12px; }
+    .order-info span { color: #aaa; }
+
+    .auto-status {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      display: none;
+    }
+    .auto-status.show { display: block; }
+    .auto-status.listening { background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); color: #40c4ff; }
+    .auto-status.detected { background: rgba(0, 200, 83, 0.1); border: 1px solid rgba(0, 200, 83, 0.2); color: #69f0ae; }
+
+    .token-status {
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      display: none;
+    }
+    .token-status.show { display: block; }
+    .token-status.valid { background: rgba(0, 200, 83, 0.1); border: 1px solid rgba(0, 200, 83, 0.2); color: #69f0ae; }
+    .token-status.invalid { background: rgba(255, 68, 68, 0.1); border: 1px solid rgba(255, 68, 68, 0.2); color: #ff6b6b; }
+    .token-status.checking { background: rgba(255, 183, 77, 0.1); border: 1px solid rgba(255, 183, 77, 0.2); color: #ffb74d; }
+
+    .telegram-links { text-align: center; margin-top: 20px; padding: 16px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+    .telegram-links a { color: #00d2ff; text-decoration: none; font-size: 13px; font-weight: 500; }
+    .telegram-links a:hover { text-decoration: underline; }
+    .telegram-links .sep { color: #444; margin: 0 8px; }
+
+    .alert { padding: 12px 16px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; display: none; }
+    .alert.show { display: block; }
+    .alert-error { background: rgba(255, 68, 68, 0.15); border: 1px solid rgba(255, 68, 68, 0.3); color: #ff6b6b; }
+    .alert-success { background: rgba(0, 200, 83, 0.15); border: 1px solid rgba(0, 200, 83, 0.3); color: #69f0ae; }
+    .alert-info { background: rgba(0, 210, 255, 0.15); border: 1px solid rgba(0, 210, 255, 0.3); color: #40c4ff; }
+    .alert-warning { background: rgba(255, 183, 77, 0.15); border: 1px solid rgba(255, 183, 77, 0.3); color: #ffb74d; }
+
+    .hidden { display: none; }
+
+    .success-page { text-align: center; padding: 30px 0; display: none; }
+    .success-page.show { display: block; }
+    .success-icon { font-size: 64px; margin-bottom: 16px; }
+    .success-page h2 { color: #69f0ae; font-size: 24px; margin-bottom: 8px; }
+    .success-page p { color: #aaa; font-size: 14px; line-height: 1.6; }
+
+    .user-info { display: flex; align-items: center; gap: 12px; padding: 12px; background: rgba(0, 210, 255, 0.08); border-radius: 10px; margin-bottom: 16px; }
+    .user-info img { width: 36px; height: 36px; border-radius: 50%; }
+    .user-info .name { color: #fff; font-weight: 600; font-size: 14px; }
+    .user-info .email { color: #888; font-size: 12px; }
+
+    @media (max-width: 520px) { .container { padding: 24px 16px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>✦ Zedox</h1>
+      <p>ChatGPT Plus - UPI Payment</p>
+    </div>
+
+    <div class="step-indicator">
+      <div class="step active" id="step1"></div>
+      <div class="step" id="step2"></div>
+      <div class="step" id="step3"></div>
+      <div class="step" id="step4"></div>
+    </div>
+
+    <div class="alert" id="alert"></div>
+
+    <!-- Step 1: Enter CDK -->
+    <div id="step1-content">
+      <div class="card">
+        <div class="card-title">🔑 Step 1: Enter Your CDK</div>
+        <div class="form-group">
+          <label>CDK Key</label>
+          <input type="text" id="cdkInput" placeholder="CDK-XXXX-XXXX-XX" maxlength="16" style="text-transform:uppercase; font-family: monospace; letter-spacing: 2px; font-size: 16px; text-align: center;">
+        </div>
+        <button class="btn btn-primary" id="validateBtn" onclick="validateCDK()">
+          <span class="btn-text">Validate & Continue</span>
+          <div class="spinner"></div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: ChatGPT Session -->
+    <div id="step2-content" class="hidden">
+      <div class="card">
+        <div class="card-title">🤖 Step 2: Connect ChatGPT Account</div>
+        <p style="color:#888; font-size:13px; margin-bottom:12px;">
+          Paste your ChatGPT session JSON to enable automatic payment credit.
+          <br><span style="color:#555; font-size:11px;">
+            Get it from: chatgpt.com → F12 → Application → Local Storage → find session data containing "accessToken"
+          </span>
+        </p>
+        <div class="form-group">
+          <label>ChatGPT Session JSON</label>
+          <textarea id="sessionJson" placeholder='Paste the FULL session JSON here...&#10;&#10;It should contain "accessToken" field inside the JSON object'></textarea>
+        </div>
+        
+        <div id="tokenStatus" class="token-status"></div>
+        
+        <button class="btn btn-primary" id="verifyTokenBtn" onclick="verifyChatGPTToken()">
+          <span class="btn-text">Verify ChatGPT Token</span>
+          <div class="spinner"></div>
+        </button>
+        
+        <div style="margin-top:12px; text-align:center;">
+          <button class="btn btn-warning" onclick="skipTokenVerification()" style="padding:8px; font-size:13px;">
+            Skip — Pay Without ChatGPT Connection
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Payment QR -->
+    <div id="step3-content" class="hidden">
+      <div class="card">
+        <div class="card-title">💳 Step 3: Pay via UPI</div>
+        
+        <div id="chatgptUserInfo" class="user-info hidden">
+          <img id="userAvatar" src="" alt="">
+          <div>
+            <div class="name" id="userName">ChatGPT User</div>
+            <div class="email" id="userEmail">user@chatgpt.com</div>
+          </div>
+          <div style="margin-left:auto;"><span style="background:rgba(0,200,83,0.15);color:#69f0ae;padding:3px 10px;border-radius:50px;font-size:11px;font-weight:600;">✓ Verified</span></div>
+        </div>
+        
+        <div class="qr-container" id="qrContainer">
+          <div class="amount-badge" id="amountDisplay">₹0.00</div>
+          <img id="qrImage" src="" alt="UPI QR Code">
+          <p style="color:#aaa; font-size:13px; margin-bottom:4px;">Scan with any UPI app to pay</p>
+          <p style="color:#555; font-size:11px;">Tap the QR to save/zoom</p>
+          <div class="order-info">
+            Order: <span id="orderIdDisplay">-</span><br>
+            VPA: <span id="vpaDisplay">-</span>
+          </div>
+        </div>
+
+        <div id="autoStatus" class="auto-status">
+          <span class="auto-text">🔍 Listening for payment verification...</span>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div class="form-group">
+            <label>UTR Number (from your UPI app after payment)</label>
+            <input type="text" id="utrInput" placeholder="Enter 12-digit UTR number">
+          </div>
+          <button class="btn btn-success" onclick="submitUTR()">
+            <span class="btn-text">✓ Submit UTR & Verify</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Success -->
+    <div class="card" id="step4-content" style="display:none;">
+      <div class="success-page show">
+        <div class="success-icon">✅</div>
+        <h2>Payment Successful!</h2>
+        <p id="successMessage" style="color:#aaa; font-size:14px;">Your ChatGPT Plus subscription has been processed.</p>
+        <p style="margin-top:12px; font-size:12px; color:#666;">Order ID: <span id="successOrderId">-</span></p>
+        <div style="margin-top:16px; padding:12px; background:rgba(0,200,83,0.1); border-radius:10px;">
+          <p style="color:#69f0ae; font-size:13px; font-weight:600;">🚀 ChatGPT Plus Activated</p>
+        </div>
+        <div style="margin-top:20px;">
+          <a href="https://t.me/zedoxprime1" target="_blank" style="color:#00d2ff; text-decoration:none; font-weight:600;">📢 Join @zedoxprime1 for support</a>
+        </div>
+        <div style="margin-top:12px;">
+          <a href="https://chatgpt.com" target="_blank" style="color:#888; text-decoration:none; font-size:13px;">Go to ChatGPT →</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="telegram-links">
+      <a href="https://t.me/zedoxprime1" target="_blank">📢 @zedoxprime1</a>
+      <span class="sep">•</span>
+      <a href="https://t.me/zedox5" target="_blank">💬 Contact @zedox5</a>
+    </div>
+  </div>
+
+  <script>
+    // ─── Firebase Configuration (from your project) ────────────
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7SjMgzuH7stBaTP-jqkHfXDLmnNJV0X8",
+      authDomain: "globexo-d9ade.firebaseapp.com",
+      databaseURL: "https://globexo-d9ade-default-rtdb.firebaseio.com",
+      projectId: "globexo-d9ade",
+      storageBucket: "globexo-d9ade.firebasestorage.app",
+      messagingSenderId: "1009453417317",
+      appId: "1:1009453417317:web:32538a719df79d3c6ed78c",
+      measurementId: "G-X0QPY3ML6M"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ─── State ─────────────────────────────────────────────────
+    let currentCDK = null;
+    let currentOrderId = null;
+    let currentAmount = 0;
+    let currentVPA = '';
+    let chatgptAccessToken = null;
+    let chatgptUser = null;
+    let paymentListener = null;
+
+    function showAlert(msg, type = 'error') {
+      const el = document.getElementById('alert');
+      el.textContent = msg;
+      el.className = `alert alert-${type} show`;
+    }
+
+    function clearAlert() {
+      document.getElementById('alert').className = 'alert';
+    }
+
+    function setStep(n) {
+      for (let i = 1; i <= 4; i++) {
+        const s = document.getElementById('step' + i);
+        s.className = 'step';
+        if (i < n) s.classList.add('completed');
+        if (i === n) s.classList.add('active');
+      }
+    }
+
+    // ─── Step 1: Validate CDK ──────────────────────────────────
+    async function validateCDK() {
+      clearAlert();
+      const cdk = document.getElementById('cdkInput').value.trim().toUpperCase();
+      if (!cdk) { showAlert('Please enter a CDK key'); return; }
+
+      const btn = document.getElementById('validateBtn');
+      btn.classList.add('loading');
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/validate-cdk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cdk })
+        });
+        const data = await res.json();
+
+        if (!data.valid) {
+          showAlert(data.error || 'Invalid CDK key');
+          btn.classList.remove('loading');
+          btn.disabled = false;
+          return;
+        }
+
+        currentCDK = cdk;
+        currentAmount = data.price || 0.50;
+
+        document.getElementById('step1-content').classList.add('hidden');
+        document.getElementById('step2-content').classList.remove('hidden');
+        setStep(2);
+
+        showAlert(`CDK validated! ₹${parseFloat(currentAmount).toFixed(2)} payment required.`, 'success');
+      } catch (err) {
+        showAlert('Network error. Please try again.');
+      }
+
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+
+    // ─── Step 2: Verify ChatGPT Token ──────────────────────────
+    async function verifyChatGPTToken() {
+      clearAlert();
+      const jsonStr = document.getElementById('sessionJson').value.trim();
+      
+      if (!jsonStr) {
+        showAlert('Please paste the session JSON first');
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch (e) {
+        showAlert('Invalid JSON format. Please paste valid JSON.');
+        return;
+      }
+
+      // Try to extract accessToken from various possible paths in the JSON
+      let accessToken = parsed.accessToken || parsed.access_token || null;
+      
+      // If not found at top level, check nested objects
+      if (!accessToken) {
+        if (parsed.session?.accessToken) accessToken = parsed.session.accessToken;
+        else if (parsed.user?.accessToken) accessToken = parsed.user.accessToken;
+        else if (parsed.data?.accessToken) accessToken = parsed.data.accessToken;
+        else if (parsed.body?.accessToken) accessToken = parsed.body.accessToken;
+        else if (parsed.props?.pageProps?.session?.accessToken) accessToken = parsed.props.pageProps.session.accessToken;
+      }
+
+      if (!accessToken) {
+        showAlert('Could not find "accessToken" in the session JSON. Please check and try again.', 'warning');
+        return;
+      }
+
+      const statusEl = document.getElementById('tokenStatus');
+      statusEl.className = 'token-status show checking';
+      statusEl.textContent = '🔍 Verifying ChatGPT token...';
+
+      const btn = document.getElementById('verifyTokenBtn');
+      btn.classList.add('loading');
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/validate-chatgpt-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken })
+        });
+        const data = await res.json();
+
+        if (data.valid) {
+          chatgptAccessToken = accessToken;
+          chatgptUser = data.user;
+          
+          statusEl.className = 'token-status show valid';
+          statusEl.innerHTML = `✅ Token verified! Welcome <strong>${data.user.name || data.user.email || 'ChatGPT User'}</strong>`;
+          
+          // Show user info
+          document.getElementById('userName').textContent = data.user.name || 'ChatGPT User';
+          document.getElementById('userEmail').textContent = data.user.email || 'user@chatgpt.com';
+          if (data.user.image) document.getElementById('userAvatar').src = data.user.image;
+          document.getElementById('chatgptUserInfo').classList.remove('hidden');
+
+          // Auto-proceed to payment
+          setTimeout(() => createPayment(), 1000);
+        } else {
+          statusEl.className = 'token-status show invalid';
+          statusEl.textContent = '❌ ' + (data.error || 'Token is invalid or expired');
+          showAlert('Token validation failed. You can still pay without it.', 'warning');
+        }
+      } catch (err) {
+        statusEl.className = 'token-status show invalid';
+        statusEl.textContent = '❌ Error validating token';
+        showAlert('Network error. You can still proceed without token verification.', 'warning');
+      }
+
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+
+    function skipTokenVerification() {
+      chatgptAccessToken = null;
+      chatgptUser = null;
+      document.getElementById('tokenStatus').className = 'token-status';
+      document.getElementById('chatgptUserInfo').classList.add('hidden');
+      createPayment();
+    }
+
+    // ─── Step 3: Create Payment ────────────────────────────────
+    async function createPayment() {
+      clearAlert();
+      if (!currentCDK) { showAlert('Please validate your CDK first'); return; }
+
+      document.getElementById('step2-content').classList.add('hidden');
+      document.getElementById('step3-content').classList.remove('hidden');
+      setStep(3);
+
+      const qrContainer = document.getElementById('qrContainer');
+      qrContainer.classList.add('show');
+
+      // Show generating state
+      document.getElementById('amountDisplay').textContent = `₹${parseFloat(currentAmount).toFixed(2)}`;
+      document.getElementById('qrImage').style.opacity = '0.4';
+
+      try {
+        const res = await fetch('/api/create-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            cdk: currentCDK, 
+            accessToken: chatgptAccessToken 
+          })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          showAlert(data.error || 'Payment creation failed');
+          return;
+        }
+
+        currentOrderId = data.orderId;
+        currentVPA = data.vpa;
+
+        document.getElementById('qrImage').src = data.qrCode;
+        document.getElementById('qrImage').style.opacity = '1';
+        document.getElementById('amountDisplay').textContent = `₹${parseFloat(data.amount).toFixed(2)}`;
+        document.getElementById('orderIdDisplay').textContent = data.orderId;
+        document.getElementById('vpaDisplay').textContent = data.vpa;
+
+        setStep(4);
+        showAlert('QR code generated! Scan with any UPI app to pay.', 'info');
+
+        // ─── Start Firebase Real-time Listener ─────────────
+        startPaymentListener(data.orderId);
+
+      } catch (err) {
+        showAlert('Network error. Please try again.');
+      }
+    }
+
+    // ─── Firebase Real-time Payment Listener ───────────────────
+    function startPaymentListener(orderId) {
+      const statusEl = document.getElementById('autoStatus');
+      statusEl.className = 'auto-status show listening';
+      statusEl.innerHTML = '🔍 <strong>Auto-detecting payment...</strong><br><span style="font-size:11px;">Listening for UPI confirmation in real-time</span>';
+
+      // Listen to the transaction document in Firestore
+      paymentListener = db.collection('transactions').doc(orderId)
+        .onSnapshot((doc) => {
+          if (!doc.exists) return;
+          
+          const data = doc.data();
+          
+          if (data.status === 'completed') {
+            statusEl.className = 'auto-status show detected';
+            statusEl.innerHTML = '✅ <strong>Payment Detected!</strong><br><span style="font-size:11px;">Proceeding with ChatGPT credit...</span>';
+            
+            // Auto-credit ChatGPT
+            autoCreditChatGPT(orderId);
+          }
+        }, (error) => {
+          console.error('Firestore listener error:', error);
+          statusEl.className = 'auto-status show listening';
+          statusEl.innerHTML = '⚠️ <strong>Reconnecting...</strong><br><span style="font-size:11px;">Real-time updates temporarily interrupted</span>';
+        });
+
+      // Also poll the backend as backup
+      window.paymentPollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId, cdk: currentCDK })
+          });
+          const data = await res.json();
+          if (data.verified) {
+            clearInterval(window.paymentPollInterval);
+            statusEl.className = 'auto-status show detected';
+            statusEl.innerHTML = '✅ <strong>Payment Verified!</strong>';
+            autoCreditChatGPT(orderId);
+          }
+        } catch (e) {}
+      }, 5000);
+    }
+
+    // ─── Auto-Credit ChatGPT After Payment ─────────────────────
+    async function autoCreditChatGPT(orderId) {
+      if (!chatgptAccessToken) {
+        showSuccessPage('Payment verified! (ChatGPT auto-credit requires session token for automatic activation)');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auto-credit-chatgpt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showSuccessPage('✅ Payment confirmed & ChatGPT account credited automatically!');
+        } else if (data.alreadyCredited) {
+          showSuccessPage('✅ Payment already processed for this account!');
+        } else {
+          showSuccessPage('✅ Payment verified! Admin will activate your ChatGPT account shortly.');
+        }
+      } catch (err) {
+        showSuccessPage('✅ Payment verified! Proceed to ChatGPT to confirm.');
+      }
+    }
+
+    // ─── Submit UTR Manually ───────────────────────────────────
+    async function submitUTR() {
+      const utr = document.getElementById('utrInput').value.trim();
+      if (!utr) { showAlert('Please enter the UTR number from your UPI app'); return; }
+
+      try {
+        const res = await fetch('/api/confirm-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: currentOrderId, cdk: currentCDK, utr })
+        });
+        const data = await res.json();
+
+        if (data.verified) {
+          autoCreditChatGPT(currentOrderId);
+        } else {
+          showAlert('UTR submitted. Admin will verify shortly.', 'info');
+        }
+      } catch (err) {
+        showAlert('Submission failed. Try again.');
+      }
+    }
+
+    // ─── Success Page ──────────────────────────────────────────
+    function showSuccessPage(message) {
+      // Cleanup listeners
+      if (paymentListener) { paymentListener(); paymentListener = null; }
+      if (window.paymentPollInterval) { clearInterval(window.paymentPollInterval); }
+
+      document.getElementById('step3-content').classList.add('hidden');
+      document.getElementById('step4-content').style.display = 'block';
+      document.getElementById('successOrderId').textContent = currentOrderId;
+      document.getElementById('successMessage').textContent = message || 'Your ChatGPT Plus subscription has been processed.';
+      setStep(4);
+    }
+
+    // ─── Enter key support ─────────────────────────────────────
+    document.getElementById('cdkInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') validateCDK();
+    });
+    document.getElementById('sessionJson').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) verifyChatGPTToken();
+    });
+
+    // Auto-uppercase CDK
+    document.getElementById('cdkInput').addEventListener('input', function() {
+      this.value = this.value.toUpperCase();
+    });
+
+    // Tap QR to view full size
+    document.getElementById('qrImage').addEventListener('click', function() {
+      if (this.src && this.src.startsWith('data:image')) {
+        window.open(this.src, '_blank', 'width=400,height=400');
+      }
+    });
+  </script>
+</body>
+</html>

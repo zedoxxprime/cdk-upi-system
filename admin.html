@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin — CDK Manager</title>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#0a0a0f;color:#e8e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:30px;min-height:100vh}
+        .container{max-width:900px;margin:0 auto}
+        .header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #2a2a3a}
+        h1{font-size:28px;font-weight:800;background:linear-gradient(135deg,#6c5ce7,#00b894);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .back-link{color:#55efc4;text-decoration:none;font-weight:600;padding:8px 16px;border:1px solid #2a2a3a;border-radius:999px;transition:all .2s}
+        .back-link:hover{background:rgba(55,239,196,0.05);border-color:#55efc4}
+        .card{background:#111118;border:1px solid #2a2a3a;border-radius:16px;padding:24px;margin-bottom:20px}
+        .card-title{font-size:18px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+        .badge{font-size:10px;font-weight:800;padding:4px 12px;border-radius:999px;background:rgba(108,92,231,0.2);color:#a29bfe;border:1px solid rgba(108,92,231,0.2)}
+        label{display:block;font-size:12px;font-weight:600;color:#8888aa;margin:12px 0 5px}
+        input{width:100%;padding:12px;background:rgba(0,0,0,0.3);border:1px solid #2a2a3a;border-radius:10px;color:#e8e8f0;font-family:'SF Mono',Menlo,monospace;font-size:14px;transition:all .2s}
+        input:focus{outline:none;border-color:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,0.1)}
+        .btn{padding:10px 24px;border:0;border-radius:10px;background:linear-gradient(135deg,#6c5ce7,#00b894);color:#fff;font-weight:700;cursor:pointer;transition:all .3s;font-size:14px}
+        .btn:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(108,92,231,0.2)}
+        .btn-danger{background:linear-gradient(135deg,#fd79a8,#e17055)}
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+        @media(max-width:600px){.stats{grid-template-columns:1fr 1fr}}
+        .stat{background:rgba(0,0,0,0.2);border:1px solid #2a2a3a;border-radius:10px;padding:14px;text-align:center}
+        .stat .num{font-size:28px;font-weight:800}
+        .stat .label{font-size:11px;color:#8888aa;margin-top:2px}
+        .cdk-item{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:1px solid #2a2a3a;border-radius:10px;margin:6px 0;background:rgba(0,0,0,0.15);flex-wrap:wrap;gap:8px}
+        .cdk-item .key{font-family:monospace;font-weight:600;font-size:14px}
+        .cdk-item .meta{font-size:11px;color:#8888aa;margin-top:2px}
+        .badge-status{padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700}
+        .badge-available{background:rgba(0,184,148,0.15);color:#55efc4;border:1px solid rgba(0,184,148,0.2)}
+        .badge-used{background:rgba(253,121,168,0.15);color:#fd79a8;border:1px solid rgba(253,121,168,0.2)}
+        .badge-partial{background:rgba(255,209,102,0.15);color:#ffd166;border:1px solid rgba(255,209,102,0.2)}
+        .login-box{text-align:center;padding:40px 20px}
+        .login-box .pass-row{display:flex;gap:10px;max-width:400px;margin:16px auto;flex-wrap:wrap;justify-content:center}
+        .login-box .pass-row input{width:auto;min-width:200px;flex:1}
+        .login-box .pass-row .btn{margin-top:0}
+        .hidden{display:none !important}
+        .status-msg{margin-top:8px;font-size:13px}
+        .status-msg.error{color:#fd79a8}
+        .status-msg.success{color:#55efc4}
+        .flex-row{display:flex;gap:10px;flex-wrap:wrap}
+        .flex-row>div{flex:1;min-width:120px}
+        .mt-8{margin-top:8px}
+        .scroll-list{max-height:500px;overflow-y:auto}
+        .scroll-list::-webkit-scrollbar{width:4px}
+        .scroll-list::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:4px}
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- HEADER -->
+    <div class="header">
+        <h1>🔐 CDK Manager</h1>
+        <a href="/" class="back-link">← Back to Tool</a>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="loginBox" class="card">
+        <div class="login-box">
+            <div style="font-size:48px;margin-bottom:8px;">🔐</div>
+            <h2 style="font-weight:700;">Admin Login</h2>
+            <p style="color:#8888aa;font-size:13px;">Enter your admin password to manage CDK keys</p>
+            <div class="pass-row">
+                <input type="password" id="adminPass" placeholder="Enter admin password..." />
+                <button class="btn" onclick="login()">Login</button>
+            </div>
+            <div id="loginMsg" class="status-msg"></div>
+        </div>
+    </div>
+
+    <!-- PANEL -->
+    <div id="panel" class="hidden">
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat"><div class="num" id="totalKeys">0</div><div class="label">Total</div></div>
+            <div class="stat"><div class="num" style="color:#55efc4;" id="availableKeys">0</div><div class="label">Available</div></div>
+            <div class="stat"><div class="num" style="color:#fd79a8;" id="usedKeys">0</div><div class="label">Used</div></div>
+            <div class="stat"><div class="num" style="color:#ffd166;" id="partialKeys">0</div><div class="label">Partial</div></div>
+        </div>
+
+        <!-- Generate -->
+        <div class="card">
+            <div class="card-title">➕ Generate CDK <span class="badge">NEW</span></div>
+            <div class="flex-row">
+                <div>
+                    <label>CDK Key (optional)</label>
+                    <input id="newCdk" placeholder="CDK-XXXX-XXXX-XXXX (auto-generate)" style="text-transform:uppercase;letter-spacing:1px;" />
+                </div>
+                <div>
+                    <label>Max Uses</label>
+                    <input id="usesInput" type="number" value="1" min="1" max="999" />
+                </div>
+                <div>
+                    <label>Label</label>
+                    <input id="labelInput" placeholder="e.g. Customer name" />
+                </div>
+            </div>
+            <button class="btn" onclick="addCDK()" style="margin-top:10px;">➕ Add CDK</button>
+            <div id="addStatus" class="status-msg mt-8"></div>
+        </div>
+
+        <!-- List -->
+        <div class="card">
+            <div class="card-title">📋 All CDKs <span class="badge" id="keyCount">0</span></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <button class="btn" style="padding:5px 14px;font-size:12px;background:rgba(255,255,255,0.05);border:1px solid #2a2a3a;" onclick="filterList('all')">All</button>
+                <button class="btn" style="padding:5px 14px;font-size:12px;background:rgba(255,255,255,0.05);border:1px solid #2a2a3a;" onclick="filterList('available')">Available</button>
+                <button class="btn" style="padding:5px 14px;font-size:12px;background:rgba(255,255,255,0.05);border:1px solid #2a2a3a;" onclick="filterList('used')">Used</button>
+            </div>
+            <div id="cdkList" class="scroll-list"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ===== FIREBASE =====
+const firebaseConfig = {
+    apiKey: "AIzaSyC7SjMgzuH7stBaTP-jqkHfXDLmnNJV0X8",
+    authDomain: "globexo-d9ade.firebaseapp.com",
+    projectId: "globexo-d9ade",
+    storageBucket: "globexo-d9ade.firebasestorage.app",
+    appId: "1:1009453417317:web:32538a719df79d3c6ed78c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const ADMIN_PASSWORD = 'admin123'; // CHANGE THIS
+let isLoggedIn = false;
+let allKeys = [];
+let currentFilter = 'all';
+
+function login() {
+    const pass = document.getElementById('adminPass').value;
+    const msg = document.getElementById('loginMsg');
+    if (pass === ADMIN_PASSWORD) {
+        isLoggedIn = true;
+        document.getElementById('loginBox').classList.add('hidden');
+        document.getElementById('panel').classList.remove('hidden');
+        msg.textContent = '';
+        loadCDKs();
+    } else {
+        msg.textContent = '❌ Wrong password';
+        msg.className = 'status-msg error';
+    }
+}
+
+document.getElementById('adminPass').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') login();
+});
+
+function randCDK() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for (let i = 0; i < 12; i++) {
+        s += chars[Math.floor(Math.random() * chars.length)];
+        if (i === 3 || i === 7) s += '-';
+    }
+    return 'CDK-' + s;
+}
+
+async function addCDK() {
+    if (!isLoggedIn) return;
+    const input = document.getElementById('newCdk');
+    const key = input.value.trim().toUpperCase() || randCDK();
+    const maxUses = parseInt(document.getElementById('usesInput').value) || 1;
+    const label = document.getElementById('labelInput').value || 'No label';
+    const status = document.getElementById('addStatus');
+
+    try {
+        await db.collection('cdk').doc(key).set({
+            key: key,
+            label: label,
+            used: false,
+            uses: 0,
+            maxUses: maxUses,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdBy: 'admin'
+        });
+        status.textContent = '✅ Added: ' + key + ' (' + maxUses + ' uses)';
+        status.className = 'status-msg success';
+        input.value = '';
+        document.getElementById('labelInput').value = '';
+        loadCDKs();
+    } catch (e) {
+        status.textContent = '❌ ' + e.message;
+        status.className = 'status-msg error';
+    }
+}
+
+async function loadCDKs() {
+    if (!isLoggedIn) return;
+    const snap = await db.collection('cdk').orderBy('createdAt', 'desc').get();
+    allKeys = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    updateStats();
+    renderList();
+}
+
+function updateStats() {
+    const total = allKeys.length;
+    const available = allKeys.filter(c => !c.used && (c.uses || 0) < (c.maxUses || 1));
+    const used = allKeys.filter(c => c.used || (c.uses || 0) >= (c.maxUses || 1));
+    const partial = allKeys.filter(c => !c.used && (c.uses || 0) > 0 && (c.uses || 0) < (c.maxUses || 1));
+
+    document.getElementById('totalKeys').textContent = total;
+    document.getElementById('availableKeys').textContent = available.length;
+    document.getElementById('usedKeys').textContent = used.length;
+    document.getElementById('partialKeys').textContent = partial.length;
+    document.getElementById('keyCount').textContent = total + ' keys';
+}
+
+function filterList(filter) {
+    currentFilter = filter;
+    renderList();
+}
+
+function renderList() {
+    let filtered = allKeys;
+    if (currentFilter === 'available') {
+        filtered = allKeys.filter(c => !c.used && (c.uses || 0) < (c.maxUses || 1));
+    } else if (currentFilter === 'used') {
+        filtered = allKeys.filter(c => c.used || (c.uses || 0) >= (c.maxUses || 1));
+    }
+
+    const list = document.getElementById('cdkList');
+    if (filtered.length === 0) {
+        list.innerHTML = '<div style="color:#8888aa;padding:30px;text-align:center;">No CDKs found</div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(c => {
+        const used = c.uses || 0;
+        const max = c.maxUses || 1;
+        const isUsed = c.used || used >= max;
+        const isPartial = !isUsed && used > 0;
+
+        let badgeClass = 'badge-available';
+        let badgeText = '✅ Available';
+        if (isUsed) { badgeClass = 'badge-used'; badgeText = '❌ Used'; }
+        else if (isPartial) { badgeClass = 'badge-partial'; badgeText = used + '/' + max + ' used'; }
+
+        const createdAt = c.createdAt ? new Date(c.createdAt.toDate()).toLocaleString() : 'N/A';
+
+        return `
+            <div class="cdk-item">
+                <div>
+                    <div class="key">${c.key}</div>
+                    <div class="meta">📝 ${c.label || 'No label'} · Created: ${createdAt} ${c.lastUserEmail ? '· Last: ' + c.lastUserEmail : ''}</div>
+                </div>
+                <span class="badge-status ${badgeClass}">${badgeText}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// Real-time listener
+db.collection('cdk').onSnapshot(() => { if (isLoggedIn) loadCDKs(); });
+</script>
+</body>
+</html>

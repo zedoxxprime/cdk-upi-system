@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin — CDK Manager</title>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0a0a0f;
+            color: #e8e8f0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 30px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card {
+            background: #111118;
+            border: 1px solid #2a2a3a;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            color: #8888aa;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 12px 0 6px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            color: #fff;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #6c5ce7;
+        }
+        .btn {
+            padding: 10px 24px;
+            border: 0;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #6c5ce7, #00b894);
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+        }
+        .stat .num {
+            font-size: 28px;
+            font-weight: 800;
+        }
+        .stat .label {
+            font-size: 11px;
+            color: #8888aa;
+            margin-top: 4px;
+        }
+        .cdk-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            margin: 6px 0;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .badge-available {
+            background: rgba(0, 184, 148, 0.2);
+            color: #55efc4;
+        }
+        .badge-used {
+            background: rgba(253, 121, 168, 0.2);
+            color: #fd79a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 CDK Manager</h1>
+
+        <div class="stats">
+            <div class="stat"><div class="num" id="totalCdk">0</div><div class="label">Total</div></div>
+            <div class="stat"><div class="num" id="availableCdk">0</div><div class="label">Available</div></div>
+            <div class="stat"><div class="num" id="usedCdk">0</div><div class="label">Used</div></div>
+        </div>
+
+        <div class="card">
+            <h2 style="font-size:18px;margin-bottom:12px;">➕ Add New CDK</h2>
+            <input id="newCdk" placeholder="CDK-XXXX-XXXX-XXXX" style="text-transform:uppercase;letter-spacing:1px;" />
+            <button class="btn" onclick="addCDK()">➕ Add</button>
+            <div id="addStatus" style="margin-top:8px;font-size:13px;color:#8888aa;"></div>
+        </div>
+
+        <div class="card">
+            <h2 style="font-size:18px;margin-bottom:12px;">📋 All CDKs</h2>
+            <div id="cdkList"></div>
+        </div>
+
+        <div style="text-align:center;padding:20px 0;border-top:1px solid #2a2a3a;margin-top:20px;font-size:12px;color:#8888aa;">
+            <a href="/" style="color:#55efc4;text-decoration:none;">← Back to Tool</a>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC7SjMgzuH7stBaTP-jqkHfXDLmnNJV0X8",
+            authDomain: "globexo-d9ade.firebaseapp.com",
+            projectId: "globexo-d9ade",
+            storageBucket: "globexo-d9ade.firebasestorage.app",
+            appId: "1:1009453417317:web:32538a719df79d3c6ed78c"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        async function loadCDKs() {
+            const snapshot = await db.collection('cdk').orderBy('createdAt', 'desc').get();
+            const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            const available = all.filter(c => !c.used).length;
+            const used = all.filter(c => c.used).length;
+
+            document.getElementById('totalCdk').textContent = all.length;
+            document.getElementById('availableCdk').textContent = available;
+            document.getElementById('usedCdk').textContent = used;
+
+            const list = document.getElementById('cdkList');
+            if (all.length === 0) {
+                list.innerHTML = '<div style="color:#8888aa;padding:20px;text-align:center;">No CDKs created</div>';
+                return;
+            }
+            list.innerHTML = all.map(cdk => `
+                <div class="cdk-item">
+                    <div>
+                        <div style="font-family:monospace;font-weight:600;">${cdk.key}</div>
+                        <div style="font-size:11px;color:#8888aa;">
+                            ${cdk.createdAt ? new Date(cdk.createdAt.toDate()).toLocaleString() : 'N/A'}
+                            ${cdk.userEmail ? ' · ' + cdk.userEmail : ''}
+                        </div>
+                    </div>
+                    <span class="badge ${cdk.used ? 'badge-used' : 'badge-available'}">
+                        ${cdk.used ? '❌ USED' : '✅ AVAILABLE'}
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        async function addCDK() {
+            const input = document.getElementById('newCdk');
+            const key = input.value.trim().toUpperCase();
+            if (!key || !key.startsWith('CDK-') || key.split('-').length !== 4) {
+                document.getElementById('addStatus').textContent = '❌ Format: CDK-XXXX-XXXX-XXXX';
+                return;
+            }
+            try {
+                await db.collection('cdk').add({
+                    key: key,
+                    used: false,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                document.getElementById('addStatus').textContent = '✅ Added!';
+                document.getElementById('addStatus').style.color = '#55efc4';
+                input.value = '';
+                loadCDKs();
+            } catch (e) {
+                document.getElementById('addStatus').textContent = '❌ ' + e.message;
+                document.getElementById('addStatus').style.color = '#fd79a8';
+            }
+        }
+
+        db.collection('cdk').onSnapshot(() => loadCDKs());
+        loadCDKs();
+    </script>
+</body>
+</html>

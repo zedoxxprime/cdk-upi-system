@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zedox Admin Panel</title>
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    .admin-header {
+      background: linear-gradient(135deg, #0f0c29, #302b63);
+      padding: 20px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .admin-header h1 {
+      font-size: 20px;
+      background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .admin-header .sub { color: #666; font-size: 12px; }
+    .logout-btn {
+      background: rgba(255,68,68,0.15);
+      border: 1px solid rgba(255,68,68,0.3);
+      color: #ff6b6b;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .logout-btn:hover { background: rgba(255,68,68,0.25); }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 30px;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .stat-card .label { color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 6px; color: #fff; }
+    .stat-card .value.green { color: #69f0ae; }
+    .stat-card .value.blue { color: #40c4ff; }
+    .stat-card .value.gold { color: #ffd740; }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      padding: 4px;
+    }
+    .tab {
+      padding: 10px 20px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #888;
+      transition: all 0.2s;
+      border: none;
+      background: none;
+    }
+    .tab.active { background: rgba(0,210,255,0.15); color: #40c4ff; }
+    .tab:hover:not(.active) { color: #aaa; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title { color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 16px; }
+
+    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom:.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; color: #aaa; font-size: 13px; margin-bottom: 4px; }
+    input, select {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: #00d2ff; }
+    select option { background: #1a1a2e; color: #fff; }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: linear-gradient(135deg, #00d2ff, #3a7bd5); color: #fff; }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-danger { background: rgba(255,68,68,0.2); color: #ff6b6b; border: 1px solid rgba(255,68,68,0.3); }
+    .btn-danger:hover { background: rgba(255,68,68,0.3); }
+    .btn-success { background: rgba(0,200,83,0.2); color: #69f0ae; border: 1px solid rgba(0,200,83,0.3); }
+    .btn-success:hover { background: rgba(0,200,83,0.3); }
+    .btn-warning { background: rgba(255,183,77,0.2); color: #ffb74d; border: 1px solid rgba(255,183,77,0.3); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left; padding: 12px 10px; color: #888;
+      font-weight: 600; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 1px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 50px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-active { background: rgba(0,200,83,0.15); color: #69f0ae; }
+    .badge-exhausted { background: rgba(255,68,68,0.15); color: #ff6b6b; }
+    .badge-pending { background: rgba(255,183,77,0.15); color: #ffb74d; }
+    .badge-completed { background: rgba(0,200,83,0.15); color: #69f0ae; }
+    .badge-paused { background: rgba(100,100,100,0.15); color: #aaa; }
+    .badge-expired { background: rgba(150,150,150,0.1); color: #888; }
+
+    .code { font-family: 'Courier New', monospace; color: #40c4ff; font-size: 12px; }
+
+    .alert {
+      padding: 12px 16px; border-radius: 8px; margin-bottom: 12px;
+      display: none; font-size: 13px;
+    }
+    .alert.show { display: block; }
+    .alert-success { background: rgba(0,200,83,0.1); border: 1px solid rgba(0,200,83,0.2); color: #69f0ae; }
+    .alert-error { background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.2); color: #ff6b6b; }
+
+    .login-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: #0a0a0f;
+      display: flex; justify-content: center; align-items: center;
+      z-index: 999;
+    }
+    .login-box {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px; padding: 40px;
+      width: 100%; max-width: 400px;
+    }
+    .login-box h2 { margin-bottom: 20px; font-size: 22px; }
+
+    .realtime-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 50px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(0, 210, 255, 0.1);
+      color: #40c4ff;
+      border: 1px solid rgba(0, 210, 255, 0.2);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+
+    @media (max-width: 768px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>🔐 Admin Login</h2>
+      <div class="form-group">
+        <label>Admin Token</label>
+        <input type="password" id="adminTokenInput" placeholder="Enter admin secret token">
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="adminLogin()">Login</button>
+    </div>
+  </div>
+
+  <!-- Main Admin -->
+  <div id="adminApp" style="display:none;">
+    <div class="admin-header">
+      <div>
+        <h1>✦ Zedox Admin</h1>
+        <div class="sub">ChatGPT Plus Payment System <span class="realtime-badge">🔴 Live</span></div>
+      </div>
+      <button class="logout-btn" onclick="adminLogout()">Logout</button>
+    </div>
+
+    <div class="container">
+      <!-- Stats -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="label">Total CDKs</div><div class="value" id="statTotalCdks">-</div></div>
+        <div class="stat-card"><div class="label">Active CDKs</div><div class="value blue" id="statActiveCdks">-</div></div>
+        <div class="stat-card"><div class="label">Exhausted</div><div class="value" id="statExhaustedCdks">-</div></div>
+        <div class="stat-card"><div class="label">Revenue</div><div class="value gold" id="statRevenue">₹0</div></div>
+        <div class="stat-card"><div class="label">Completed</div><div class="value green" id="statCompleted">-</div></div>
+        <div class="stat-card"><div class="label">Pending</div><div class="value" id="statPending">-</div></div>
+      </div>
+
+      <div class="alert" id="adminAlert"></div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('cdks', this)">🔑 CDK Keys</button>
+        <button class="tab" onclick="switchTab('transactions', this)">💳 Transactions</button>
+        <button class="tab" onclick="switchTab('settings', this)">⚙️ Settings</button>
+      </div>
+
+      <!-- Tab: CDKs -->
+      <div class="tab-content active" id="tabCdks">
+        <div class="card">
+          <div class="card-title">Create New CDK</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Usage Type</label>
+              <select id="newUsageType">
+                <option value="single">Single Use</option>
+                <option value="multi">Multi Use</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Max Uses</label>
+              <input type="number" id="newMaxUses" value="1" min="1" max="1000">
+            </div>
+            <div class="form-group">
+              <label>Price (₹)</label>
+              <input type="number" id="newPrice" value="0.50" step="0.10" min="0.10">
+            </div>
+            <div class="form-group">
+              <label>Plan Type</label>
+              <select id="newPlanType">
+                <option value="plus">Plus</option>
+                <option value="pro">Pro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Expires (days)</label>
+              <input type="number" id="newExpDays" value="30" min="1" max="365">
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="createCDK()">Create Single</button>
+            <button class="btn btn-primary" onclick="bulkCreateCDK()">Bulk Create (5)</button>
+            <button class="btn btn-primary" onclick="bulkCreateCDK(10)">Bulk Create (10)</button>
+            <button class="btn btn-primary" onclick="bulkCreateCDK(25)">Bulk Create (25)</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">All CDK Keys <span id="cdkCount" style="color:#555; font-weight:400;"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Status</th>
+                  <th>Type</th>
+                  <th>Price</th>
+                  <th>Uses</th>
+                  <th>Max</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="cdkTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Transactions -->
+      <div class="tab-content" id="tabTransactions">
+        <div class="card">
+          <div class="card-title">Filter</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-sm btn-primary" onclick="loadTransactions('all')">All</button>
+            <button class="btn btn-sm btn-warning" onclick="loadTransactions('pending')">Pending</button>
+            <button class="btn btn-sm btn-success" onclick="loadTransactions('completed')">Completed</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Transactions <span id="txCount" style="color:#555; font-weight:400;"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>CDK</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>UTR</th>
+                  <th>ChatGPT</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="txTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Settings -->
+      <div class="tab-content" id="tabSettings">
+        <div class="card">
+          <div class="card-title">System Configuration</div>
+          <div class="form-group">
+            <label>Default Price (₹)</label>
+            <input type="number" id="cfgDefaultPrice" value="0.50" step="0.10">
+          </div>
+          <div class="form-group">
+            <label>UPI VPA (Merchant UPI ID)</label>
+            <input type="text" id="cfgUpiVpa" placeholder="merchant@upi">
+          </div>
+          <div class="form-group">
+            <label>Site Name</label>
+            <input type="text" id="cfgSiteName" value="Zedox ChatGPT Plus">
+          </div>
+          <div class="form-group">
+            <label>Telegram Contact</label>
+            <input type="text" id="cfgTelegramContact" value="@zedox5">
+          </div>
+          <div class="form-group">
+            <label>Telegram Channel</label>
+            <input type="text" id="cfgTelegramChannel" value="@zedoxprime1">
+          </div>
+          <button class="btn btn-primary" onclick="saveConfig()">Save Settings</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Manual ChatGPT Credit</div>
+          <p style="color:#888; font-size:13px; margin-bottom:12px;">Use this to manually credit a ChatGPT account from a completed transaction.</p>
+          <div class="form-group">
+            <label>Transaction Order ID</label>
+            <input type="text" id="manualCreditOrderId" placeholder="Enter order ID">
+          </div>
+          <button class="btn btn-success" onclick="manualCreditChatGPT()">Credit ChatGPT Account</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ─── Firebase Config ───────────────────────────────────────
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7SjMgzuH7stBaTP-jqkHfXDLmnNJV0X8",
+      authDomain: "globexo-d9ade.firebaseapp.com",
+      projectId: "globexo-d9ade",
+      storageBucket: "globexo-d9ade.firebasestorage.app",
+      messagingSenderId: "1009453417317",
+      appId: "1:1009453417317:web:32538a719df79d3c6ed78c"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ─── Auth ──────────────────────────────────────────────────
+    let adminToken = localStorage.getItem('adminToken');
+    let realtimeListeners = [];
+
+    function adminLogin() {
+      const token = document.getElementById('adminTokenInput').value.trim();
+      if (!token) { alert('Enter admin token'); return; }
+      adminToken = token;
+      localStorage.setItem('adminToken', token);
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('adminApp').style.display = 'block';
+      initAdmin();
+    }
+
+    function adminLogout() {
+      localStorage.removeItem('adminToken');
+      adminToken = null;
+      document.getElementById('loginOverlay').style.display = 'flex';
+      document.getElementById('adminApp').style.display = 'none';
+      // Cleanup listeners
+      realtimeListeners.forEach(u => u());
+      realtimeListeners = [];
+    }
+
+    if (adminToken) {
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('adminApp').style.display = 'block';
+    }
+
+    // ─── API Helper ────────────────────────────────────────────
+    async function api(path, options = {}) {
+      const headers = { 'Content-Type': 'application/json', ...options.headers };
+      if (adminToken) headers['x-admin-token'] = adminToken;
+      const res = await fetch(path, { ...options, headers });
+      return res.json();
+    }
+
+    function showAdminAlert(msg, type = 'success') {
+      const el = document.getElementById('adminAlert');
+      el.textContent = msg;
+      el.className = `alert alert-${type} show`;
+      setTimeout(() => { el.className = 'alert'; }, 5000);
+    }
+
+    function switchTab(tab, btn) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+      if (tab === 'cdks') loadCDKs();
+      if (tab === 'transactions') { loadTransactions('all'); startRealtimeTransactions(); }
+      if (tab === 'settings') loadConfig();
+    }
+
+    // ─── Init ──────────────────────────────────────────────────
+    async function initAdmin() {
+      document.getElementById('adminApp').style.display = 'block';
+      await loadStats();
+      await loadCDKs();
+      await loadTransactions('all');
+      await loadConfig();
+      startRealtimeTransactions();
+    }
+
+    // ─── Stats ─────────────────────────────────────────────────
+    async function loadStats() {
+      try {
+        const data = await api('/api/admin/stats');
+        if (data.success) {
+          const s = data.stats;
+          document.getElementById('statTotalCdks').textContent = s.totalCdks;
+          document.getElementById('statActiveCdks').textContent = s.activeCdks;
+          document.getElementById('statExhaustedCdks').textContent = s.exhaustedCdks;
+          document.getElementById('statRevenue').textContent = '₹' + s.totalRevenue.toFixed(2);
+          document.getElementById('statCompleted').textContent = s.completedTx;
+          document.getElementById('statPending').textContent = s.pendingTx;
+        }
+      } catch (e) { console.error('Stats error:', e); }
+    }
+
+    // ─── CDKs ──────────────────────────────────────────────────
+    async function loadCDKs() {
+      try {
+        const data = await api('/api/admin/cdks');
+        const tbody = document.getElementById('cdkTableBody');
+        tbody.innerHTML = '';
+        if (!data.success || !data.cdks.length) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#555;padding:30px;">No CDK keys found. Create one above!</td></tr>';
+          return;
+        }
+        document.getElementById('cdkCount').textContent = `(${data.cdks.length} total)`;
+        data.cdks.forEach(c => {
+          const tr = document.createElement('tr');
+          const statusClass = c.status || 'active';
+          tr.innerHTML = `
+            <td class="code">${c.key || c.id}</td>
+            <td><span class="badge badge-${statusClass}">${statusClass}</span></td>
+            <td>${c.usageType || 'single'}</td>
+            <td>₹${parseFloat(c.price || 0.50).toFixed(2)}</td>
+            <td>${c.uses || 0}</td>
+            <td>${c.maxUses || 1}</td>
+            <td style="font-size:11px;color:#666;">${c.createdAt ? new Date(c.createdAt.toDate ? c.createdAt.toDate() : c.createdAt).toLocaleDateString() : '-'}</td>
+            <td>
+              <button class="btn btn-sm ${statusClass === 'active' ? 'btn-warning' : 'btn-success'}" onclick="toggleCDK('${c.key || c.id}', '${statusClass === 'active' ? 'paused' : 'active'}')">
+                ${statusClass === 'active' ? 'Pause' : 'Activate'}
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="deleteCDK('${c.key || c.id}')">Delete</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) { console.error('CDK load error:', e); }
+    }
+
+    async function createCDK() {
+      const payload = {
+        usageType: document.getElementById('newUsageType').value,
+        maxUses: parseInt(document.getElementById('newMaxUses').value),
+        price: parseFloat(document.getElementById('newPrice').value),
+        planType: document.getElementById('newPlanType').value,
+        expiresInDays: parseInt(document.getElementById('newExpDays').value)
+      };
+      try {
+        const data = await api('/api/admin/cdks', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (data.success) {
+          showAdminAlert(`✅ CDK created: ${data.cdk.key}`);
+          loadCDKs();
+          loadStats();
+        } else showAdminAlert(data.error, 'error');
+      } catch (e) { showAdminAlert('Failed to create CDK', 'error'); }
+    }
+
+    async function bulkCreateCDK(count = 5) {
+      const payload = {
+        count,
+        usageType: document.getElementById('newUsageType').value,
+        maxUses: parseInt(document.getElementById('newMaxUses').value),
+        price: parseFloat(document.getElementById('newPrice').value),
+        planType: document.getElementById('newPlanType').value,
+        expiresInDays: parseInt(document.getElementById('newExpDays').value)
+      };
+      try {
+        const data = await api('/api/admin/cdks/bulk', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (data.success) {
+          showAdminAlert(`✅ Created ${data.count} CDKs!`);
+          loadCDKs();
+          loadStats();
+          // Copy to clipboard
+          const keys = data.cdks.map(c => c.key).join('\n');
+          navigator.clipboard.writeText(keys).then(() => {
+            showAdminAlert(`✅ ${data.count} CDKs created & copied to clipboard!`, 'success');
+          });
+        } else showAdminAlert(data.error, 'error');
+      } catch (e) { showAdminAlert('Bulk create failed', 'error'); }
+    }
+
+    async function toggleCDK(key, newStatus) {
+      try {
+        const data = await api(`/api/admin/cdks/${key}`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (data.success) { showAdminAlert(`CDK ${newStatus}`); loadCDKs(); }
+        else showAdminAlert(data.error, 'error');
+      } catch (e) { showAdminAlert('Failed to update CDK', 'error'); }
+    }
+
+    async function deleteCDK(key) {
+      if (!confirm(`Delete CDK ${key}?`)) return;
+      try {
+        const data = await api(`/api/admin/cdks/${key}`, { method: 'DELETE' });
+        if (data.success) { showAdminAlert('CDK deleted'); loadCDKs(); loadStats(); }
+        else showAdminAlert(data.error, 'error');
+      } catch (e) { showAdminAlert('Delete failed', 'error'); }
+    }
+
+    // ─── Transactions ──────────────────────────────────────────
+    async function loadTransactions(status = 'all') {
+      try {
+        const url = status === 'all' ? '/api/admin/transactions' : `/api/admin/transactions?status=${status}`;
+        const data = await api(url);
+        const tbody = document.getElementById('txTableBody');
+        tbody.innerHTML = '';
+        if (!data.success || !data.transactions.length) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#555;padding:30px;">No transactions found</td></tr>';
+          return;
+        }
+        document.getElementById('txCount').textContent = `(${data.transactions.length} shown)`;
+        data.transactions.forEach(t => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="code" style="font-size:11px;">${t.id}</td>
+            <td class="code">${t.cdk || '-'}</td>
+            <td>₹${parseFloat(t.amount || 0).toFixed(2)}</td>
+            <td><span class="badge badge-${t.status}">${t.status}</span></td>
+            <td style="font-family:monospace;font-size:12px;color:#888;">${t.utr || '-'}</td>
+            <td>${t.hasChatgptToken ? '✅' : '❌'}</td>
+            <td style="font-size:11px;color:#666;">${t.createdAt ? new Date(t.createdAt.toDate ? t.createdAt.toDate() : t.createdAt).toLocaleString() : '-'}</td>
+            <td>
+              ${t.status === 'pending' ? `<button class="btn btn-sm btn-success" onclick="markComplete('${t.id}')">✓ Complete</button>` : 
+                (t.status === 'completed' && !t.chatgptCredited ? `<button class="btn btn-sm btn-warning" onclick="manualCreditChatGPT('${t.id}')">⚡ Credit ChatGPT</button>` : '-')}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) { console.error('Tx load error:', e); }
+    }
+
+    async function markComplete(orderId) {
+      try {
+        const data = await api(`/api/admin/transactions/${orderId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: 'completed' })
+        });
+        if (data.success) { showAdminAlert('Transaction completed'); loadTransactions('all'); loadStats(); }
+        else showAdminAlert(data.error, 'error');
+      } catch (e) { showAdminAlert('Failed to complete', 'error'); }
+    }
+
+    // ─── Real-time Transaction Listener (Firebase) ────────────
+    function startRealtimeTransactions() {
+      // Cleanup old listeners
+      realtimeListeners.forEach(u => u());
+      realtimeListeners = [];
+
+      const listener = db.collection('transactions')
+        .orderBy('createdAt', 'desc')
+        .limit(10)
+        .onSnapshot((snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'modified' || change.type === 'added') {
+              const data = change.doc.data();
+              if (data.status === 'completed' && change.type === 'modified') {
+                loadStats();
+                // If we're on transactions tab, reload
+                if (document.getElementById('tabTransactions').classList.contains('active')) {
+                  loadTransactions('all');
+                }
+              }
+            }
+          });
+        }, (error) => {
+          console.error('Realtime listener error:', error);
+        });
+
+      realtimeListeners.push(listener);
+    }
+
+    // ─── Manual ChatGPT Credit ─────────────────────────────────
+    async function manualCreditChatGPT(orderId) {
+      if (!orderId) {
+        orderId = document.getElementById('manualCreditOrderId').value.trim();
+      }
+      if (!orderId) { showAdminAlert('Please enter an Order ID', 'error'); return; }
+
+      try {
+        const data = await api('/api/auto-credit-chatgpt', {
+          method: 'POST',
+          body: JSON.stringify({ orderId })
+        });
+
+        if (data.success) {
+          showAdminAlert('✅ ChatGPT account credited successfully!');
+        } else if (data.alreadyCredited) {
+          showAdminAlert('Already credited previously.');
+        } else {
+          showAdminAlert(`⚠️ ${data.error || 'Auto-credit failed. Contact OpenAI support.'}`, 'error');
+        }
+      } catch (e) {
+        showAdminAlert('Failed to credit ChatGPT account', 'error');
+      }
+    }
+
+    // ─── Config ────────────────────────────────────────────────
+    async function loadConfig() {
+      try {
+        const data = await api('/api/admin/config');
+        if (data.success) {
+          const c = data.config;
+          document.getElementById('cfgDefaultPrice').value = c.defaultPrice || 0.50;
+          document.getElementById('cfgUpiVpa').value = c.upiVpa || '';
+          document.getElementById('cfgSiteName').value = c.siteName || 'Zedox ChatGPT Plus';
+          document.getElementById('cfgTelegramContact').value = c.telegramContact || '@zedox5';
+          document.getElementById('cfgTelegramChannel').value = c.telegramChannel || '@zedoxprime1';
+        }
+      } catch (e) { console.error('Config load error:', e); }
+    }
+
+    async function saveConfig() {
+      const payload = {
+        defaultPrice: parseFloat(document.getElementById('cfgDefaultPrice').value),
+        upiVpa: document.getElementById('cfgUpiVpa').value.trim(),
+        siteName: document.getElementById('cfgSiteName').value.trim(),
+        telegramContact: document.getElementById('cfgTelegramContact').value.trim(),
+        telegramChannel: document.getElementById('cfgTelegramChannel').value.trim()
+      };
+      try {
+        const data = await api('/api/admin/config', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (data.success) showAdminAlert('✅ Settings saved');
+        else showAdminAlert(data.error, 'error');
+      } catch (e) { showAdminAlert('Save failed', 'error'); }
+    }
+  </script>
+</body>
+</html>
